@@ -16,9 +16,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Function signature for a custom decoder function used with WithFile. It takes
+// the file content as a byte slice and returns the decoded configuration data
+// and any error encountered.
+type DecoderFunc[T any] func([]byte) (*T, error)
+
 // Structure representing a configuration object with support for JSON, YAML,
 // and Protobuf files.
 type Config[T any] struct {
+	customDecoder     DecoderFunc[T]
 	data              *T
 	filePath          string
 	fileType          string
@@ -28,7 +34,9 @@ type Config[T any] struct {
 	tmpl              *T
 }
 
-// Returns a new Config object with the specified type template.
+// Returns a new Config object with the specified type template. The type
+// template is used to determine the type of the configuration data to return
+// (map, a specific struct type, etc.)
 func NewConfig[T any](tmpl *T) *Config[T] {
 	return &Config[T]{
 		tmpl: tmpl,
@@ -44,7 +52,7 @@ func (c *Config[T]) WithJSONFile(filePath string) *Config[T] {
 }
 
 // Sets the YAML configuration file for the Config object and returns the Config
-// object.
+// object. This module uses "gopkg.in/yaml.v3" to process YAML files.
 func (c *Config[T]) WithYAMLFile(filePath string) *Config[T] {
 	c.filePath = filePath
 	c.fileType = "yaml"
@@ -79,6 +87,18 @@ func (c *Config[T]) WithTextFile(filePath string) *Config[T] {
 	return c
 }
 
+// Sets configuration file path and custom decoder function for the Config
+// object. Returns the Config object.
+func (c *Config[T]) WithFile(
+	filePath string,
+	decoder DecoderFunc[T],
+) *Config[T] {
+	c.filePath = filePath
+	c.fileType = "custom"
+	c.customDecoder = decoder
+	return c
+}
+
 // Sets the refresh interval for the Config object and returns the Config
 // object. If the refresh interval is greater than zero, the configuration will
 // be automatically reloaded when it changes. The configuration file will be
@@ -88,6 +108,10 @@ func (c *Config[T]) WithRefresh(d time.Duration) *Config[T] {
 	return c
 }
 
+// Retrieves the current configuration. If the refresh interval is set and the
+// configuration file has changed since the last check, it will reload the
+// configuration from the file. Returns the configuration data and any error
+// encountered during the process.
 func (c *Config[T]) GetConf() (*T, error) {
 	if c.data != nil {
 		if c.refreshInterval > 0 &&
@@ -189,6 +213,16 @@ func (c *Config[T]) unmarshal(fileContent []byte) (*T, error) {
 			return nil, err
 		}
 
+		c.data = data
+		return c.data, nil
+	case "custom":
+		if c.customDecoder == nil {
+			return nil, fmt.Errorf("custom decoder is not set")
+		}
+		data, err := c.customDecoder(fileContent)
+		if err != nil {
+			return nil, err
+		}
 		c.data = data
 		return c.data, nil
 	default:

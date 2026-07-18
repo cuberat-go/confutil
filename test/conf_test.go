@@ -430,3 +430,63 @@ func TestTextConf(t *testing.T) {
 		return
 	}
 }
+
+func TestCustomConf(t *testing.T) {
+	type myCustomConf struct {
+		Field1 string `json:"field1"`
+		Field2 int    `json:"field2"`
+	}
+
+	decoder := func(data []byte) (*myCustomConf, error) {
+		val := &myCustomConf{}
+		if err := json.Unmarshal(data, val); err != nil {
+			return nil, err
+		}
+		return val, nil
+	}
+
+	jsonVal := &myCustomConf{
+		Field1: "value1",
+		Field2: 42,
+	}
+
+	confBytes, err := json.Marshal(jsonVal)
+	if err != nil {
+		t.Fatalf("failed to marshal config data: %v", err)
+		return
+	}
+	tmpFile, err := os.CreateTemp("", "conf_test_*.txt")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+		return
+	}
+	tmpFileName := tmpFile.Name()
+	defer os.Remove(tmpFileName)
+
+	if _, err := tmpFile.Write(confBytes); err != nil {
+		t.Fatalf("failed to write to temp file: %v", err)
+		return
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("failed to close temp file: %v", err)
+		return
+	}
+
+	expectedVal := &myCustomConf{
+		Field1: "value1",
+		Field2: 42,
+	}
+
+	confObj := confutil.NewConfig(&myCustomConf{}).
+		WithFile(tmpFileName, decoder)
+
+	confData, err := confObj.GetConf()
+	if err != nil {
+		t.Fatalf("failed to get config: %v", err)
+		return
+	}
+	if !assert.Equal(t, confData, expectedVal) {
+		t.Fatalf("config data mismatch: got %+v, want %+v", confData, expectedVal)
+		return
+	}
+}
