@@ -16,31 +16,29 @@ import (
 
 	// First-party modules.
 	"github.com/cuberat-go/confutil"
-	"gopkg.in/yaml.v3"
 )
 
+// Tests JSON files where the configuration is represented as a struct and
+// refresh is enabled.
 func TestRefresh(t *testing.T) {
 	type MyConf struct {
 		Field1 string `json:"field1"`
 		Field2 int    `json:"field2"`
 	}
+
 	expectedVal := &MyConf{
 		Field1: "value1",
 		Field2: 42,
 	}
 
-	confBytes, err := json.Marshal(expectedVal)
-	if err != nil {
-		t.Fatalf("failed to marshal config data: %v", err)
-		return
-	}
+	confBytes := []byte(`{"field1":"value1","field2":42}`)
 	tmpFile, err := os.CreateTemp("", "conf_test_*.json")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 		return
 	}
-	tmpFileName := tmpFile.Name()
-	defer os.Remove(tmpFileName)
+	confFileName := tmpFile.Name()
+	defer os.Remove(confFileName)
 
 	if _, err := tmpFile.Write(confBytes); err != nil {
 		t.Fatalf("failed to write to temp file: %v", err)
@@ -52,13 +50,14 @@ func TestRefresh(t *testing.T) {
 	}
 
 	confObj := confutil.NewConfig(&MyConf{}).
-		WithJSONFile(tmpFileName).WithRefresh(2 * time.Second)
+		WithJSONFile(confFileName).WithRefresh(2 * time.Second)
 
 	confData, err := confObj.GetConf()
 	if err != nil {
 		t.Fatalf("failed to get config: %v", err)
 		return
 	}
+	t.Logf("confData: %+v", confData)
 	if *confData != *expectedVal {
 		t.Fatalf("config data mismatch: got %+v, want %+v", confData, expectedVal)
 		return
@@ -73,7 +72,7 @@ func TestRefresh(t *testing.T) {
 		t.Fatalf("failed to marshal config data: %v", err)
 		return
 	}
-	if err := os.WriteFile(tmpFileName, confBytes, 0644); err != nil {
+	if err := os.WriteFile(confFileName, confBytes, 0644); err != nil {
 		t.Fatalf("failed to write updated config to temp file: %v", err)
 		return
 	}
@@ -105,6 +104,7 @@ func TestRefresh(t *testing.T) {
 	}
 }
 
+// Tests configuration without refresh enabled.
 func TestNoRefresh(t *testing.T) {
 	type MyConf struct {
 		Field1 string `json:"field1"`
@@ -115,11 +115,7 @@ func TestNoRefresh(t *testing.T) {
 		Field2: 42,
 	}
 
-	confBytes, err := json.Marshal(expectedVal)
-	if err != nil {
-		t.Fatalf("failed to marshal config data: %v", err)
-		return
-	}
+	confBytes := []byte(`{"field1":"value1","field2":42}`)
 	tmpFile, err := os.CreateTemp("", "conf_test_*.json")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -177,6 +173,7 @@ func TestNoRefresh(t *testing.T) {
 	}
 }
 
+// Tests YAML files where the configuration is represented as a struct.
 func TestYAMLConf(t *testing.T) {
 	type MyConf struct {
 		Field1 string `yaml:"field1"`
@@ -187,11 +184,10 @@ func TestYAMLConf(t *testing.T) {
 		Field2: 42,
 	}
 
-	confBytes, err := yaml.Marshal(expectedVal)
-	if err != nil {
-		t.Fatalf("failed to marshal config data: %v", err)
-		return
-	}
+	confBytes := []byte(`field1: "value1"
+field2: 42
+`)
+
 	tmpFile, err := os.CreateTemp("", "conf_test_*.yaml")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -223,6 +219,7 @@ func TestYAMLConf(t *testing.T) {
 	}
 }
 
+// Tests JSON files where the configuration is represented as a map.
 func TestJSONMapConf(t *testing.T) {
 	type MyConf map[string]string
 	expectedVal := &MyConf{
@@ -230,11 +227,7 @@ func TestJSONMapConf(t *testing.T) {
 		"field2": "42",
 	}
 
-	confBytes, err := json.Marshal(expectedVal)
-	if err != nil {
-		t.Fatalf("failed to marshal config data: %v", err)
-		return
-	}
+	confBytes := []byte(`{"field1":"value1","field2":"42"}`)
 	tmpFile, err := os.CreateTemp("", "conf_test_*.json")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -266,6 +259,7 @@ func TestJSONMapConf(t *testing.T) {
 	}
 }
 
+// Tests protobuf binary files.
 func TestProtoConf(t *testing.T) {
 	expectedVal := &my_proto_conf.MyProtoConf{
 		Field1: "value1",
@@ -308,10 +302,62 @@ func TestProtoConf(t *testing.T) {
 	}
 }
 
+// Tests protojson files (protobufs marshalled to JSON). The standard JSON
+// decoder doesn't handle protobuf oneof fields "correctly", because Go uses
+// interfaces to enforce oneof constraints, so WithProtoJSONFile indicates we
+// should use the protojson package.
+func TestProtoJSONConf(t *testing.T) {
+	confText := `{
+	"top_field": "value1",
+	"field2": 42
+}`
+
+	// Go uses interfaces to enforce oneof constraints, so we need to set the
+	// appropriate oneof field.
+	expectedVal := &my_proto_conf.ProtoWithOneof{
+		TopField: "value1",
+		TestOneof: &my_proto_conf.ProtoWithOneof_Field2{
+			Field2: 42,
+		},
+	}
+
+	confBytes := []byte(confText)
+	tmpFile, err := os.CreateTemp("", "conf_test_*.proto")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+		return
+	}
+	tmpFileName := tmpFile.Name()
+	defer os.Remove(tmpFileName)
+
+	if _, err := tmpFile.Write(confBytes); err != nil {
+		t.Fatalf("failed to write to temp file: %v", err)
+		return
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("failed to close temp file: %v", err)
+		return
+	}
+
+	confObj := confutil.NewConfig(&my_proto_conf.ProtoWithOneof{}).
+		WithProtoJSONFile(tmpFileName)
+
+	confData, err := confObj.GetConf()
+	if err != nil {
+		t.Fatalf("failed to get config: %v", err)
+		return
+	}
+	if !proto.Equal(confData, expectedVal) {
+		t.Fatalf("config data mismatch: got %+v, want %+v", confData, expectedVal)
+		return
+	}
+}
+
 type myBinaryConf struct {
 	protoVal *my_proto_conf.MyProtoConf
 }
 
+// Implements the BinaryUnmarshaller interface.
 func (c *myBinaryConf) UnmarshalBinary(data []byte) error {
 	if c.protoVal == nil {
 		c.protoVal = &my_proto_conf.MyProtoConf{}
@@ -319,6 +365,8 @@ func (c *myBinaryConf) UnmarshalBinary(data []byte) error {
 	return proto.Unmarshal(data, c.protoVal)
 }
 
+// Tests binary files (parsed using the BinaryUnmarshaller interface). See the
+// `WithBinaryFile` method.
 func TestBinaryConf(t *testing.T) {
 	protoVal := &my_proto_conf.MyProtoConf{
 		Field1: "value1",
@@ -373,6 +421,7 @@ type myTextConf struct {
 	Field2 int    `json:"field2"`
 }
 
+// Implements the TextUnmarshaller interface.
 func (c *myTextConf) UnmarshalText(data []byte) error {
 	type foo myTextConf
 	val := &foo{}
@@ -384,17 +433,10 @@ func (c *myTextConf) UnmarshalText(data []byte) error {
 	return nil
 }
 
+// Tests text files (parsed using the TextUnmarshaller interface). See the
+// `WithTextFile` method.
 func TestTextConf(t *testing.T) {
-	jsonVal := &myTextConf{
-		Field1: "value1",
-		Field2: 42,
-	}
-
-	confBytes, err := json.Marshal(jsonVal)
-	if err != nil {
-		t.Fatalf("failed to marshal config data: %v", err)
-		return
-	}
+	confBytes := []byte(`{"field1":"value1","field2":42}`)
 	tmpFile, err := os.CreateTemp("", "conf_test_*.txt")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -431,6 +473,8 @@ func TestTextConf(t *testing.T) {
 	}
 }
 
+// Tests custom decoding of configuration files with a custom decoder. See the
+// `WithFile` method.
 func TestCustomConf(t *testing.T) {
 	type myCustomConf struct {
 		Field1 string `json:"field1"`
@@ -445,16 +489,7 @@ func TestCustomConf(t *testing.T) {
 		return val, nil
 	}
 
-	jsonVal := &myCustomConf{
-		Field1: "value1",
-		Field2: 42,
-	}
-
-	confBytes, err := json.Marshal(jsonVal)
-	if err != nil {
-		t.Fatalf("failed to marshal config data: %v", err)
-		return
-	}
+	confBytes := []byte(`{"field1":"value1","field2":42}`)
 	tmpFile, err := os.CreateTemp("", "conf_test_*.txt")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)

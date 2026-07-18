@@ -4,17 +4,36 @@ Configuration utilities for Go.
 
 The key functionality in this module:
 
-- Refresh the in-memory configuration periodically if the configuration file has changed.
+- Refresh the in-memory configuration periodically if the configuration file has changed. Useful for long-running programs.
 - Support multiple encodings for configuration files, including multiple ways to support custom encodings.
 
 E.g.,
 
+The following code creates a configuration object from which you get your configuration data structure each time you need it (call `GetConf()` each time you use the configuration). If you request the configuration again after 2 seconds, it will check to see if the file on disk has changed. If so, it will load the new file and return the updated data structure.
+
+Configuration file contents:
+
+```json
+{
+  "field1": "value1",
+  "field2": 42
+}
+```
+
 ```go
 confObj := confutil.NewConfig(&MyConf{}).
-    WithJSONFile(tmpFileName).WithRefresh(2 * time.Second)
+    WithJSONFile(conf.FileName).WithRefresh(2 * time.Second)
 
 // confData is of type *MyConf.
 confData, err := confObj.GetConf()
+
+fmt.Printf("confData: %+v", confData)
+```
+
+Output:
+
+```sh
+confData: &{Field1:value1 Field2:42}
 ```
 
 <!-- gomarkdoc:embed:start -->
@@ -26,21 +45,23 @@ import "github.com/cuberat-go/confutil"
 
 ## Index
 
-- [type Config](#Config)
-  - [func NewConfig\[T any\]\(tmpl \*T\) \*Config\[T\]](#NewConfig)
-  - [func \(c \*Config\[T\]\) GetConf\(\) \(\*T, error\)](#Config[T].GetConf)
-  - [func \(c \*Config\[T\]\) WithBinaryFile\(filePath string\) \*Config\[T\]](#Config[T].WithBinaryFile)
-  - [func \(c \*Config\[T\]\) WithFile\(filePath string, decoder DecoderFunc\[T\]\) \*Config\[T\]](#Config[T].WithFile)
-  - [func \(c \*Config\[T\]\) WithJSONFile\(filePath string\) \*Config\[T\]](#Config[T].WithJSONFile)
-  - [func \(c \*Config\[T\]\) WithProtoFile\(filePath string\) \*Config\[T\]](#Config[T].WithProtoFile)
-  - [func \(c \*Config\[T\]\) WithRefresh\(d time.Duration\) \*Config\[T\]](#Config[T].WithRefresh)
-  - [func \(c \*Config\[T\]\) WithTextFile\(filePath string\) \*Config\[T\]](#Config[T].WithTextFile)
-  - [func \(c \*Config\[T\]\) WithYAMLFile\(filePath string\) \*Config\[T\]](#Config[T].WithYAMLFile)
-- [type DecoderFunc](#DecoderFunc)
+* [Index](#index)
+* [type Config](#type-config)
+  * [func NewConfig](#func-newconfig)
+  * [func (\*Config\[T\]) GetConf](#func-configt-getconf)
+  * [func (\*Config\[T\]) WithBinaryFile](#func-configt-withbinaryfile)
+  * [func (\*Config\[T\]) WithFile](#func-configt-withfile)
+  * [func (\*Config\[T\]) WithJSONFile](#func-configt-withjsonfile)
+  * [func (\*Config\[T\]) WithProtoFile](#func-configt-withprotofile)
+  * [func (\*Config\[T\]) WithProtoJSONFile](#func-configt-withprotojsonfile)
+  * [func (\*Config\[T\]) WithRefresh](#func-configt-withrefresh)
+  * [func (\*Config\[T\]) WithTextFile](#func-configt-withtextfile)
+  * [func (\*Config\[T\]) WithYAMLFile](#func-configt-withyamlfile)
+* [type DecoderFunc](#type-decoderfunc)
 
 <a name="Config"></a>
 
-## type [Config](https://github.com/cuberat-go/confutil/blob/main/conf.go#L26-L35)
+## type [Config](https://github.com/cuberat-go/confutil/blob/main/conf.go#L27-L36)
 
 Structure representing a configuration object with support for JSON, YAML, and Protobuf files.
 
@@ -52,7 +73,7 @@ type Config[T any] struct {
 
 <a name="NewConfig"></a>
 
-### func [NewConfig](https://github.com/cuberat-go/confutil/blob/main/conf.go#L40)
+### func [NewConfig](https://github.com/cuberat-go/confutil/blob/main/conf.go#L41)
 
 ```go
 func NewConfig[T any](tmpl *T) *Config[T]
@@ -62,7 +83,7 @@ Returns a new Config object with the specified type template. The type template 
 
 <a name="Config[T].GetConf"></a>
 
-### func \(\*Config\[T\]\) [GetConf](https://github.com/cuberat-go/confutil/blob/main/conf.go#L115)
+### func \(\*Config\[T\]\) [GetConf](https://github.com/cuberat-go/confutil/blob/main/conf.go#L125)
 
 ```go
 func (c *Config[T]) GetConf() (*T, error)
@@ -72,7 +93,7 @@ Retrieves the current configuration. If the refresh interval is set and the conf
 
 <a name="Config[T].WithBinaryFile"></a>
 
-### func \(\*Config\[T\]\) [WithBinaryFile](https://github.com/cuberat-go/confutil/blob/main/conf.go#L74)
+### func \(\*Config\[T\]\) [WithBinaryFile](https://github.com/cuberat-go/confutil/blob/main/conf.go#L84)
 
 ```go
 func (c *Config[T]) WithBinaryFile(filePath string) *Config[T]
@@ -82,7 +103,7 @@ Sets the binary configuration file for the Config object and returns the Config 
 
 <a name="Config[T].WithFile"></a>
 
-### func \(\*Config\[T\]\) [WithFile](https://github.com/cuberat-go/confutil/blob/main/conf.go#L92-L95)
+### func \(\*Config\[T\]\) [WithFile](https://github.com/cuberat-go/confutil/blob/main/conf.go#L102-L105)
 
 ```go
 func (c *Config[T]) WithFile(filePath string, decoder DecoderFunc[T]) *Config[T]
@@ -92,7 +113,7 @@ Sets configuration file path and custom decoder function for the Config object. 
 
 <a name="Config[T].WithJSONFile"></a>
 
-### func \(\*Config\[T\]\) [WithJSONFile](https://github.com/cuberat-go/confutil/blob/main/conf.go#L48)
+### func \(\*Config\[T\]\) [WithJSONFile](https://github.com/cuberat-go/confutil/blob/main/conf.go#L49)
 
 ```go
 func (c *Config[T]) WithJSONFile(filePath string) *Config[T]
@@ -102,7 +123,7 @@ Sets the JSON configuration file for the Config object and returns the Config ob
 
 <a name="Config[T].WithProtoFile"></a>
 
-### func \(\*Config\[T\]\) [WithProtoFile](https://github.com/cuberat-go/confutil/blob/main/conf.go#L64)
+### func \(\*Config\[T\]\) [WithProtoFile](https://github.com/cuberat-go/confutil/blob/main/conf.go#L65)
 
 ```go
 func (c *Config[T]) WithProtoFile(filePath string) *Config[T]
@@ -110,9 +131,19 @@ func (c *Config[T]) WithProtoFile(filePath string) *Config[T]
 
 Sets the Proto configuration file for the Config object and returns the Config object.
 
+<a name="Config[T].WithProtoJSONFile"></a>
+
+### func \(\*Config\[T\]\) [WithProtoJSONFile](https://github.com/cuberat-go/confutil/blob/main/conf.go#L74)
+
+```go
+func (c *Config[T]) WithProtoJSONFile(filePath string) *Config[T]
+```
+
+Sets the proto JSON configuration file for the Config object and returns the Config object. This is useful for Protobuf messages serialized in JSON format to ensure oneof fields, etc., are correctly handled.
+
 <a name="Config[T].WithRefresh"></a>
 
-### func \(\*Config\[T\]\) [WithRefresh](https://github.com/cuberat-go/confutil/blob/main/conf.go#L106)
+### func \(\*Config\[T\]\) [WithRefresh](https://github.com/cuberat-go/confutil/blob/main/conf.go#L116)
 
 ```go
 func (c *Config[T]) WithRefresh(d time.Duration) *Config[T]
@@ -122,7 +153,7 @@ Sets the refresh interval for the Config object and returns the Config object. I
 
 <a name="Config[T].WithTextFile"></a>
 
-### func \(\*Config\[T\]\) [WithTextFile](https://github.com/cuberat-go/confutil/blob/main/conf.go#L84)
+### func \(\*Config\[T\]\) [WithTextFile](https://github.com/cuberat-go/confutil/blob/main/conf.go#L94)
 
 ```go
 func (c *Config[T]) WithTextFile(filePath string) *Config[T]
@@ -132,7 +163,7 @@ Sets the text configuration file for the Config object and returns the Config ob
 
 <a name="Config[T].WithYAMLFile"></a>
 
-### func \(\*Config\[T\]\) [WithYAMLFile](https://github.com/cuberat-go/confutil/blob/main/conf.go#L56)
+### func \(\*Config\[T\]\) [WithYAMLFile](https://github.com/cuberat-go/confutil/blob/main/conf.go#L57)
 
 ```go
 func (c *Config[T]) WithYAMLFile(filePath string) *Config[T]
@@ -142,7 +173,7 @@ Sets the YAML configuration file for the Config object and returns the Config ob
 
 <a name="DecoderFunc"></a>
 
-## type [DecoderFunc](https://github.com/cuberat-go/confutil/blob/main/conf.go#L22)
+## type [DecoderFunc](https://github.com/cuberat-go/confutil/blob/main/conf.go#L23)
 
 Function signature for a custom decoder function used with WithFile. It takes the file content as a byte slice and returns the decoded configuration data and any error encountered.
 
