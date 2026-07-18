@@ -10,6 +10,7 @@ import (
 
 	// Extended modules.
 	"golang.org/x/sys/unix"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
 	// Third-party modules.
@@ -64,6 +65,15 @@ func (c *Config[T]) WithYAMLFile(filePath string) *Config[T] {
 func (c *Config[T]) WithProtoFile(filePath string) *Config[T] {
 	c.filePath = filePath
 	c.fileType = "proto"
+	return c
+}
+
+// Sets the proto JSON configuration file for the Config object and returns the
+// Config object. This is useful for Protobuf messages serialized in JSON
+// format to ensure oneof fields, etc., are correctly handled.
+func (c *Config[T]) WithProtoJSONFile(filePath string) *Config[T] {
+	c.filePath = filePath
+	c.fileType = "protojson"
 	return c
 }
 
@@ -184,6 +194,18 @@ func (c *Config[T]) unmarshal(fileContent []byte) (*T, error) {
 			return nil, fmt.Errorf("type %T does not implement proto.Message", data)
 		}
 		if err := proto.Unmarshal(fileContent, protoData); err != nil {
+			return nil, err
+		}
+
+		c.data = data
+		return c.data, nil
+	case "protojson":
+		data := new(T)
+		protoData, ok := any(data).(proto.Message)
+		if !ok {
+			return nil, fmt.Errorf("type %T does not implement proto.Message", data)
+		}
+		if err := protojson.Unmarshal(fileContent, protoData); err != nil {
 			return nil, err
 		}
 
